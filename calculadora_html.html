@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Sueldo Variable - Master English Center</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        const CalculadoraSueldoVariable = () => {
+            const [sueldoFijo, setSueldoFijo] = useState(1000000);
+            const [variableMaxima, setVariableMaxima] = useState(700000);
+            const [estudiantesPiso, setEstudiantesPiso] = useState(950);
+            const [estudiantesTecho, setEstudiantesTecho] = useState(1600);
+            const [estudiantesActuales, setEstudiantesActuales] = useState(1340);
+
+            // Cargar configuraciones del localStorage al iniciar
+            const [configuraciones, setConfiguraciones] = useState(() => {
+                const saved = localStorage.getItem('configuraciones_sueldo');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            // Cargar histórico del localStorage al iniciar
+            const [historico, setHistorico] = useState(() => {
+                const saved = localStorage.getItem('historico_estudiantes');
+                return saved ? JSON.parse(saved) : [
+                    { mes: 'Mar 2025', estudiantes: 1200 },
+                    { mes: 'Abr 2025', estudiantes: 1250 },
+                    { mes: 'May 2025', estudiantes: 1180 },
+                    { mes: 'Jun 2025', estudiantes: 1320 },
+                    { mes: 'Jul 2025', estudiantes: 1400 },
+                    { mes: 'Ago 2025', estudiantes: 1340 }
+                ];
+            });
+
+            const [nuevoMes, setNuevoMes] = useState('');
+            const [nuevosEstudiantes, setNuevosEstudiantes] = useState('');
+            const [nombreConfig, setNombreConfig] = useState('');
+
+            // Guardar en localStorage cuando cambian los datos
+            useEffect(() => {
+                localStorage.setItem('configuraciones_sueldo', JSON.stringify(configuraciones));
+            }, [configuraciones]);
+
+            useEffect(() => {
+                localStorage.setItem('historico_estudiantes', JSON.stringify(historico));
+            }, [historico]);
+
+            // Calcular la variable actual
+            const calcularVariable = (estudiantes) => {
+                if (estudiantes <= estudiantesPiso) return 0;
+                if (estudiantes >= estudiantesTecho) return variableMaxima;
+                return Math.round(variableMaxima * (estudiantes - estudiantesPiso) / (estudiantesTecho - estudiantesPiso));
+            };
+
+            // Promedio móvil 6 meses
+            const promedioMovil = useMemo(() => {
+                const ultimos6 = historico.slice(-6);
+                if (ultimos6.length === 0) return estudiantesActuales;
+                return Math.round(ultimos6.reduce((sum, item) => sum + item.estudiantes, 0) / ultimos6.length);
+            }, [historico, estudiantesActuales]);
+
+            const variableActual = calcularVariable(estudiantesActuales);
+            const sueldoTotal = sueldoFijo + variableActual;
+            
+            // Cálculo vs promedio móvil
+            const diferenciaVsPromedio = estudiantesActuales - promedioMovil;
+            const porcentajeCambio = promedioMovil > 0 ? ((diferenciaVsPromedio / promedioMovil) * 100) : 0;
+
+            // Funciones auxiliares
+            const agregarMes = () => {
+                if (nuevoMes && nuevosEstudiantes) {
+                    setHistorico([...historico, { mes: nuevoMes, estudiantes: Number(nuevosEstudiantes) }]);
+                    setNuevoMes('');
+                    setNuevosEstudiantes('');
+                }
+            };
+
+            const eliminarMes = (index) => {
+                setHistorico(historico.filter((_, i) => i !== index));
+            };
+
+            const guardarConfiguracion = () => {
+                if (nombreConfig) {
+                    const nuevaConfig = {
+                        nombre: nombreConfig,
+                        sueldoFijo,
+                        variableMaxima,
+                        estudiantesPiso,
+                        estudiantesTecho,
+                        fecha: new Date().toLocaleDateString()
+                    };
+                    setConfiguraciones([...configuraciones, nuevaConfig]);
+                    setNombreConfig('');
+                    
+                    // Mostrar confirmación
+                    setTimeout(() => {
+                        alert(`Configuración "${nuevaConfig.nombre}" guardada exitosamente!\\n\\nTotal configuraciones: ${configuraciones.length + 1}\\nUbicación: Navegador local (persiste al refrescar)`);
+                    }, 100);
+                }
+            };
+
+            const cargarConfiguracion = (config) => {
+                setSueldoFijo(config.sueldoFijo);
+                setVariableMaxima(config.variableMaxima);
+                setEstudiantesPiso(config.estudiantesPiso);
+                setEstudiantesTecho(config.estudiantesTecho);
+            };
+
+            // Análisis de sensibilidad
+            const analisisSensibilidad = useMemo(() => {
+                const cambios = [-100, -50, -25, 0, 25, 50, 100];
+                return cambios.map(cambio => ({
+                    cambio,
+                    estudiantes: estudiantesActuales + cambio,
+                    variable: calcularVariable(estudiantesActuales + cambio),
+                    diferencia: calcularVariable(estudiantesActuales + cambio) - variableActual
+                }));
+            }, [estudiantesActuales, variableActual]);
+
+            // Generar tabla de ejemplos
+            const ejemplos = useMemo(() => {
+                const rangos = [];
+                const step = Math.ceil((estudiantesTecho - estudiantesPiso) / 10);
+                
+                rangos.push(estudiantesPiso - 50);
+                rangos.push(estudiantesPiso);
+                
+                for (let i = estudiantesPiso + step; i < estudiantesTecho; i += step) {
+                    rangos.push(i);
+                }
+                
+                rangos.push(estudiantesTecho);
+                rangos.push(estudiantesActuales);
+                
+                return [...new Set(rangos)]
+                    .sort((a, b) => a - b)
+                    .map(estudiantes => ({
+                        estudiantes,
+                        variable: calcularVariable(estudiantes),
+                        total: sueldoFijo + calcularVariable(estudiantes),
+                        esActual: estudiantes === estudiantesActuales
+                    }));
+            }, [sueldoFijo, variableMaxima, estudiantesPiso, estudiantesTecho, estudiantesActuales]);
+
+            const formatCurrency = (amount) => {
+                return new Intl.NumberFormat('es-AR', {
+                    style: 'currency',
+                    currency: 'ARS',
+                    minimumFractionDigits: 0
+                }).format(amount);
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto p-6 space-y-8">
+                    <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
+                        Calculadora de Sueldo Variable - Master English Center
+                    </h1>
+
+                    {/* Controles */}
+                    <div className="bg-gray-50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold mb-2">⚙️ Configuración de Variables</h2>
+                        <p className="text-gray-600 text-sm mb-4">
+                            Ajustá los parámetros principales de la fórmula de sueldo variable. Los cambios se reflejan inmediatamente en todos los cálculos.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Sueldo Fijo ($)</label>
+                                <input
+                                    type="number"
+                                    value={sueldoFijo}
+                                    onChange={(e) => setSueldoFijo(Number(e.target.value))}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Variable Máxima ($)</label>
+                                <input
+                                    type="number"
+                                    value={variableMaxima}
+                                    onChange={(e) => setVariableMaxima(Number(e.target.value))}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Estudiantes Piso</label>
+                                <input
+                                    type="number"
+                                    value={estudiantesPiso}
+                                    onChange={(e) => setEstudiantesPiso(Number(e.target.value))}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Estudiantes Techo</label>
+                                <input
+                                    type="number"
+                                    value={estudiantesTecho}
+                                    onChange={(e) => setEstudiantesTecho(Number(e.target.value))}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Estudiantes Actuales</label>
+                                <input
+                                    type="number"
+                                    value={estudiantesActuales}
+                                    onChange={(e) => setEstudiantesActuales(Number(e.target.value))}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Fórmula */}
+                    <div className="bg-blue-50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold mb-2">📐 Fórmula Matemática</h2>
+                        <p className="text-gray-600 text-sm mb-4">
+                            Esta es la fórmula que se aplica cada mes para calcular el sueldo. Se actualiza automáticamente según tus configuraciones.
+                        </p>
+                        <div className="font-mono text-lg bg-white p-4 rounded border">
+                            <div>Sueldo Total = {formatCurrency(sueldoFijo)} (fijo) + Variable</div>
+                            <div className="mt-2">
+                                Variable = MAX(0, {formatCurrency(variableMaxima)} × (Estudiantes - {estudiantesPiso}) ÷ {estudiantesTecho - estudiantesPiso})
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Resultado actual */}
+                    <div className="bg-green-50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold mb-2">💰 Resultado del Mes Actual</h2>
+                        <p className="text-gray-600 text-sm mb-4">
+                            Basado en el número de estudiantes activos que ingresaste, este sería el sueldo a pagar este mes.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-green-600">{estudiantesActuales}</div>
+                                <div className="text-sm text-gray-600">Estudiantes</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-green-600">{formatCurrency(variableActual)}</div>
+                                <div className="text-sm text-gray-600">Variable</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-green-600">{formatCurrency(sueldoTotal)}</div>
+                                <div className="text-sm text-gray-600">Sueldo Total</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Análisis vs Promedio Móvil */}
+                    <div className="bg-blue-50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold mb-2">📊 Análisis vs Promedio Móvil (6 meses)</h2>
+                        <p className="text-gray-600 text-sm mb-4">
+                            Compara tus estudiantes actuales con el promedio de los últimos 6 meses para identificar tendencias de crecimiento o decrecimiento.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-blue-600">{promedioMovil}</div>
+                                <div className="text-sm text-gray-600">Promedio 6 meses</div>
+                            </div>
+                            <div className="text-center">
+                                <div className={`text-2xl font-bold ${diferenciaVsPromedio >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {diferenciaVsPromedio > 0 ? '+' : ''}{diferenciaVsPromedio}
+                                </div>
+                                <div className="text-sm text-gray-600">Diferencia absoluta</div>
+                            </div>
+                            <div className="text-center">
+                                <div className={`text-2xl font-bold ${porcentajeCambio >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {porcentajeCambio > 0 ? '+' : ''}{porcentajeCambio.toFixed(1)}%
+                                </div>
+                                <div className="text-sm text-gray-600">Cambio porcentual</div>
+                            </div>
+                            <div className="text-center">
+                                <div className={`text-2xl font-bold ${diferenciaVsPromedio >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {diferenciaVsPromedio >= 0 ? '📈' : '📉'}
+                                </div>
+                                <div className="text-sm text-gray-600">Tendencia</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Configuraciones Guardadas */}
+                    <div className="bg-white border rounded-lg p-4">
+                        <h3 className="text-lg font-semibold mb-2">💾 Configuraciones Guardadas</h3>
+                        <p className="text-gray-600 text-sm mb-4">
+                            Guardá diferentes escenarios de sueldo para comparar opciones. Se almacenan permanentemente en tu navegador local.
+                        </p>
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                type="text"
+                                placeholder="Nombre de configuración"
+                                value={nombreConfig}
+                                onChange={(e) => setNombreConfig(e.target.value)}
+                                className="flex-1 px-3 py-2 border rounded-md"
+                            />
+                            <button 
+                                onClick={guardarConfiguracion}
+                                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+                            >
+                                Guardar
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {configuraciones.map((config, index) => (
+                                <div key={index} className="p-3 border rounded-lg">
+                                    <div className="font-semibold">{config.nombre}</div>
+                                    <div className="text-sm text-gray-600">Guardada: {config.fecha}</div>
+                                    <div className="text-sm">Variable máx: {formatCurrency(config.variableMaxima)}</div>
+                                    <button 
+                                        onClick={() => cargarConfiguracion(config)}
+                                        className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                                    >
+                                        Cargar
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Tabla de ejemplos */}
+                    <div className="bg-white border rounded-lg overflow-hidden">
+                        <div className="p-4 border-b">
+                            <h2 className="text-xl font-semibold mb-2">📋 Simulación de Rangos</h2>
+                            <p className="text-gray-600 text-sm">
+                                Tabla completa que muestra cómo varía el sueldo según diferentes cantidades de estudiantes. La fila amarilla marca tu situación actual.
+                            </p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left">Estudiantes</th>
+                                        <th className="px-4 py-2 text-right">Variable</th>
+                                        <th className="px-4 py-2 text-right">Sueldo Total</th>
+                                        <th className="px-4 py-2 text-right">Valor por Estudiante</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {ejemplos.map((ejemplo, index) => {
+                                        const valorPorEstudiante = ejemplo.estudiantes > estudiantesPiso ? 
+                                            Math.round(variableMaxima / (estudiantesTecho - estudiantesPiso)) : 0;
+                                        
+                                        return (
+                                            <tr 
+                                                key={index} 
+                                                className={`border-b ${ejemplo.esActual ? 'bg-yellow-50 font-semibold' : 'hover:bg-gray-50'}`}
+                                            >
+                                                <td className="px-4 py-2">
+                                                    {ejemplo.estudiantes}
+                                                    {ejemplo.esActual && <span className="ml-2 text-yellow-600">(Actual)</span>}
+                                                </td>
+                                                <td className="px-4 py-2 text-right">{formatCurrency(ejemplo.variable)}</td>
+                                                <td className="px-4 py-2 text-right">{formatCurrency(ejemplo.total)}</td>
+                                                <td className="px-4 py-2 text-right">{formatCurrency(valorPorEstudiante)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<CalculadoraSueldoVariable />, document.getElementById('root'));
+    </script>
+</body>
+</html>
